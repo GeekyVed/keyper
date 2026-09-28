@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rdpiano"
+version = "0.1.0"
+description = "Auditable keyboard-channel file transfer for approved Wayland RDP sessions"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "RDPiano contributors" }]
+keywords = ["rdp", "wayland", "remmina", "wtype", "powershell"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/GeekyVed/rdpiano"
+Repository = "https://github.com/GeekyVed/rdpiano.git"
+Issues = "https://github.com/GeekyVed/rdpiano/issues"
+
+[project.scripts]
+rdpiano = "rdpiano.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

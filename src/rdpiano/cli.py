@@ -1,0 +1,278 @@
+"""Command-line interface for RDPiano."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import shutil
+import sys
+
+from . import __version__
+from .archive import create_project_zip, looks_sensitive
+from .errors import RDPianoError
+from .protocol import TransferPlan, build_file_plan, build_tree_plan
+from .runtime import ProcessLock, stop_running
+from .sender import send_plan
+from .wayland import WindowGuard, WtypeKeyboard, countdown, require_runtime
+
+DEFAULT_ALLOWED_WINDOW = r"(?i)remmina"
+DEFAULT_MAX_PAYLOAD_MIB = 5
+DIRECT_TYPE_CHUNK_CHARS = 1024
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than zero")
+    return number
+
+
+def _nonnegative_int(value: str) -> int:
+    number = int(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("value must be zero or greater")
+    return number
+
+
+def _countdown_seconds(value: str) -> int:
+    number = _positive_int(value)
+    if number > 60:
+        raise argparse.ArgumentTypeError("countdown cannot exceed 60 seconds")
+    return number
+
+
+def _key_delay_ms(value: str) -> int:
+    number = _nonnegative_int(value)
+    if number > 100:
+        raise argparse.ArgumentTypeError("key delay cannot exceed 100 milliseconds")
+    return number
+
+
+def _settle_ms(value: str) -> int:
+    number = _nonnegative_int(value)
+    if number > 5000:
+        raise argparse.ArgumentTypeError("settle time cannot exceed 5000 milliseconds")
+    return number
+
+
+def _add_typing_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--countdown", type=_countdown_seconds, default=7)
+    parser.add_argument("--key-delay-ms", type=_key_delay_ms, default=2)
+    parser.add_argument("--allowed-window", default=DEFAULT_ALLOWED_WINDOW)
+
+
+def _add_transfer_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--to", required=True, help="Destination path in remote PowerShell")
+    parser.add_argument("--chunk-chars", type=_positive_int, default=1024)
+    parser.add_argument("--max-payload-mib", type=_positive_int, default=DEFAULT_MAX_PAYLOAD_MIB)
+    parser.add_argument("--settle-ms", type=_settle_ms, default=100)
+    parser.add_argument("--dry-run", action="store_true", help="Print commands instead of typing them")
+    _add_typing_options(parser)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="rdpiano",
+        description="Ferry reviewed files into an approved Remmina session using visible keyboard input.",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    commands.add_parser("doctor", help="Check the local Wayland/Hyprland requirements")
+
+    probe = commands.add_parser("probe", help="Type a harmless keyboard-layout probe into Remmina")
+    _add_typing_options(probe)
+
+    raw = commands.add_parser("type", help="Type a UTF-8 text file directly into the focused RDP app")
+    raw.add_argument("file", type=Path)
+    raw.add_argument("--max-bytes", type=_positive_int, default=200_000)
+    _add_typing_options(raw)
+
+    send = commands.add_parser("send", help="Transfer one file through a remote PowerShell prompt")
+    send.add_argument("file", type=Path)
+    send.add_argument("--compression", choices=("auto", "gzip", "none"), default="auto")
+    send.add_argument("--allow-sensitive", action="store_true")
+    _add_transfer_options(send)
+
+    tree = commands.add_parser("send-tree", help="Compress and transfer a project directory")
+    tree.add_argument("directory", type=Path)
+    tree.add_argument("--allow-sensitive", action="store_true")
+    _add_transfer_options(tree)
+
+    commands.add_parser("stop", help="Stop a running transfer")
+    return parser
+
+
+def _print_plan(plan: TransferPlan, key_delay_ms: int, settle_ms: int) -> None:
+    ratio = plan.payload_size / plan.source_size if plan.source_size else 1
+    print(f"Type:          {plan.kind}")
+    print(f"Destination:   {plan.destination}")
+    print(f"Source bytes:  {plan.source_size:,}")
+    print(f"Payload bytes: {plan.payload_size:,} ({ratio:.1%})")
+    print(f"Encoded chars: {plan.encoded_size:,}")
+    print(f"Chunks:        {len(plan.chunks):,}")
+    print(f"Compression:   {plan.compression}")
+    print(f"SHA-256:       {plan.source_sha256}")
+    print(f"Estimated time: {plan.estimated_seconds(key_delay_ms, settle_ms):.1f}s")
+
+
+def _dry_run(plan: TransferPlan) -> None:
+    print("# RDPiano PowerShell transcript")
+    for command in plan.commands:
+        print(command)
+
+
+def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
+    _print_plan(plan, args.key_delay_ms, args.settle_ms)
+    max_payload = args.max_payload_mib * 1024 * 1024
+    if plan.payload_size > max_payload:
+        raise RDPianoError(
+            f"Payload is {plan.payload_size:,} bytes, above the configured {max_payload:,}-byte limit"
+        )
+    if args.dry_run:
+        _dry_run(plan)
+        return 0
+
+    require_runtime()
+    with ProcessLock():
+        countdown(
+            args.countdown,
+            "Open PowerShell inside the RDP session, leave an empty prompt ready, "
+            "then focus the Remmina window.",
+        )
+        guard = WindowGuard.capture(args.allowed_window)
+        print(f"Locked to Remmina window: {guard.expected.title!r}")
+        keyboard = WtypeKeyboard(args.key_delay_ms)
+
+        def progress(current: int, total: int) -> None:
+            if current == total or current == 1 or current % max(1, total // 10) == 0:
+                print(f"Sent {current}/{total} commands", flush=True)
+
+        send_plan(
+            plan,
+            keyboard,
+            guard,
+            settle_ms=args.settle_ms,
+            progress=progress,
+        )
+    print("Transfer commands completed. Confirm the green RDPIANO OK message in PowerShell.")
+    return 0
+
+
+def command_doctor() -> int:
+    checks = {
+        "wtype": shutil.which("wtype"),
+        "hyprctl": shutil.which("hyprctl"),
+        "remmina": shutil.which("remmina"),
+        "python": sys.executable,
+    }
+    failed = False
+    for name, path in checks.items():
+        if path:
+            print(f"[ok] {name}: {path}")
+        else:
+            failed = True
+            print(f"[missing] {name}")
+    try:
+        require_runtime()
+        print("[ok] Wayland + Hyprland session")
+    except RDPianoError as exc:
+        failed = True
+        print(f"[failed] {exc}")
+    return 1 if failed else 0
+
+
+def command_probe(args: argparse.Namespace) -> int:
+    require_runtime()
+    probe = "RDPIANO-PROBE: abcXYZ 0123456789 +/= $()[]{};,:._-\\"
+    with ProcessLock():
+        countdown(
+            args.countdown,
+            "Open Notepad inside the RDP session, click an empty document, then focus Remmina.",
+        )
+        guard = WindowGuard.capture(args.allowed_window)
+        guard.assert_focused()
+        WtypeKeyboard(args.key_delay_ms).type_text(probe)
+    print(f"Expected text: {probe}")
+    return 0
+
+
+def command_type(args: argparse.Namespace) -> int:
+    path = args.file.resolve()
+    if not path.is_file():
+        raise RDPianoError(f"Text file does not exist: {path}")
+    data = path.read_bytes()
+    if len(data) > args.max_bytes:
+        raise RDPianoError(f"File is larger than the {args.max_bytes:,}-byte direct-typing limit")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RDPianoError("Direct typing accepts UTF-8 text only; use 'send' for binary files") from exc
+
+    require_runtime()
+    with ProcessLock():
+        countdown(
+            args.countdown,
+            "Open the target editor inside RDP, disable auto-closing/format-on-type, "
+            "click the insertion point, then focus Remmina.",
+        )
+        guard = WindowGuard.capture(args.allowed_window)
+        keyboard = WtypeKeyboard(args.key_delay_ms)
+        for offset in range(0, len(text), DIRECT_TYPE_CHUNK_CHARS):
+            guard.assert_focused()
+            keyboard.type_text(text[offset : offset + DIRECT_TYPE_CHUNK_CHARS])
+    print(f"Typed {len(data):,} UTF-8 bytes.")
+    return 0
+
+
+def command_send(args: argparse.Namespace) -> int:
+    path = args.file.resolve()
+    if not path.is_file():
+        raise RDPianoError(f"File does not exist: {path}")
+    if looks_sensitive(path) and not args.allow_sensitive:
+        raise RDPianoError(
+            f"Refusing sensitive-looking file {path.name!r}; pass --allow-sensitive only after review"
+        )
+    plan = build_file_plan(
+        path.read_bytes(),
+        args.to,
+        chunk_chars=args.chunk_chars,
+        compression=args.compression,
+    )
+    return _send(plan, args)
+
+
+def command_send_tree(args: argparse.Namespace) -> int:
+    archive, files = create_project_zip(args.directory, allow_sensitive=args.allow_sensitive)
+    print(f"Archived {len(files):,} reviewed files from {args.directory.resolve()}")
+    plan = build_tree_plan(archive, args.to, chunk_chars=args.chunk_chars)
+    return _send(plan, args)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "doctor":
+            return command_doctor()
+        if args.command == "probe":
+            return command_probe(args)
+        if args.command == "type":
+            return command_type(args)
+        if args.command == "send":
+            return command_send(args)
+        if args.command == "send-tree":
+            return command_send_tree(args)
+        if args.command == "stop":
+            return stop_running()
+        parser.error(f"Unknown command: {args.command}")
+    except RDPianoError as exc:
+        print(f"rdpiano: error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"rdpiano: operating-system error: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("\nrdpiano: interrupted", file=sys.stderr)
+        return 130
+    return 0
