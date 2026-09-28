@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from rdpiano.errors import RDPianoError
-from rdpiano.runtime import ProcessLock
+from keyper.errors import KeyperError
+from keyper.runtime import ProcessLock
 
 
 class RuntimeTests(unittest.TestCase):
@@ -13,11 +13,11 @@ class RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {"XDG_RUNTIME_DIR": directory}):
                 with ProcessLock():
-                    with self.assertRaises(RDPianoError):
+                    with self.assertRaises(KeyperError):
                         with ProcessLock():
                             self.fail("second lock must not be acquired")
 
-                self.assertFalse((Path(directory) / f"rdpiano-{os.getuid()}.pid").exists())
+                self.assertFalse((Path(directory) / f"keyper-{os.getuid()}.pid").exists())
 
 
 if __name__ == "__main__":

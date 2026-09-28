@@ -2,8 +2,8 @@ import base64
 import gzip
 import unittest
 
-from rdpiano.errors import RDPianoError
-from rdpiano.protocol import build_file_plan, build_tree_plan, powershell_quote
+from keyper.errors import KeyperError
+from keyper.protocol import build_file_plan, build_tree_plan, powershell_quote
 
 
 class ProtocolTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(plan.compression, "gzip")
         self.assertEqual(gzip.decompress(payload), source)
         self.assertIn(plan.source_sha256, plan.commands[-1])
-        self.assertIn(".rdpiano.tmp", plan.commands[-1])
+        self.assertIn(".keyper.tmp", plan.commands[-1])
         self.assertEqual(plan.commands[-1].count("{"), plan.commands[-1].count("}"))
 
     def test_file_plan_keeps_incompressible_small_payload_raw(self) -> None:
@@ -35,7 +35,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(plan.commands[-1].count("{"), plan.commands[-1].count("}"))
 
     def test_rejects_invalid_chunk_size(self) -> None:
-        with self.assertRaises(RDPianoError):
+        with self.assertRaises(KeyperError):
             build_file_plan(b"hello", "file.txt", chunk_chars=20)
 
 

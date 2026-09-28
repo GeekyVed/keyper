@@ -4,8 +4,8 @@ import unittest
 import zipfile
 import io
 
-from rdpiano.archive import create_project_zip, looks_sensitive
-from rdpiano.errors import RDPianoError
+from keyper.archive import create_project_zip, looks_sensitive
+from keyper.errors import KeyperError
 
 
 class ArchiveTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class ArchiveTests(unittest.TestCase):
             root = Path(directory)
             (root / "main.dart").write_text("void main() {}", encoding="utf-8")
             (root / ".env").write_text("SECRET=x", encoding="utf-8")
-            with self.assertRaises(RDPianoError):
+            with self.assertRaises(KeyperError):
                 create_project_zip(root)
 
     def test_flutter_and_environment_secrets_are_detected(self) -> None:

@@ -2,9 +2,9 @@
 set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-source_launcher="$project_dir/rdpiano"
+source_launcher="$project_dir/keyper"
 bin_dir="${HOME}/.local/bin"
-installed_launcher="$bin_dir/rdpiano"
+installed_launcher="$bin_dir/keyper"
 install_dependencies=false
 uninstall=false
 
@@ -13,7 +13,7 @@ usage() {
     "Usage: ./install.sh [--with-deps | --uninstall]" \
     "" \
     "  --with-deps  Install required packages on Omarchy or Arch first" \
-    "  --uninstall  Remove this checkout's ~/.local/bin/rdpiano link" \
+    "  --uninstall  Remove this checkout's ~/.local/bin/keyper link" \
     "  -h, --help   Show this help"
 }
 
@@ -75,7 +75,7 @@ if ((${#missing[@]})); then
 fi
 
 if ! python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
-  printf '%s\n' "RDPiano requires Python 3.11 or newer." >&2
+  printf '%s\n' "Keyper requires Python 3.11 or newer." >&2
   exit 1
 fi
 
@@ -90,11 +90,11 @@ if [[ -e "$installed_launcher" || -L "$installed_launcher" ]]; then
 fi
 
 ln -sfn -- "$source_launcher" "$installed_launcher"
-printf 'Installed RDPiano launcher: %s -> %s\n' "$installed_launcher" "$source_launcher"
+printf 'Installed Keyper launcher: %s -> %s\n' "$installed_launcher" "$source_launcher"
 
 case ":${PATH}:" in
   *":${bin_dir}:"*) ;;
-  *) printf 'Add %s to PATH before invoking rdpiano.\n' "$bin_dir" ;;
+  *) printf 'Add %s to PATH before invoking keyper.\n' "$bin_dir" ;;
 esac
 
 "$installed_launcher" doctor

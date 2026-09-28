@@ -1,7 +1,7 @@
 import unittest
 
-from rdpiano.errors import RDPianoError
-from rdpiano.wayland import WindowGuard, WindowIdentity
+from keyper.errors import KeyperError
+from keyper.wayland import WindowGuard, WindowIdentity
 
 
 class WaylandTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class WaylandTests(unittest.TestCase):
 
     def test_guard_rejects_non_remmina_target(self) -> None:
         window = WindowIdentity("0x123", "com.example.Editor", "Editor", 42)
-        with self.assertRaises(RDPianoError):
+        with self.assertRaises(KeyperError):
             WindowGuard(window, r"(?i)remmina")
 
 

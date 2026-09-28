@@ -6,7 +6,7 @@ import io
 from pathlib import Path
 import zipfile
 
-from .errors import RDPianoError
+from .errors import KeyperError
 
 DEFAULT_EXCLUDES = frozenset({".git", ".dart_tool", "build", "__pycache__", ".pytest_cache", ".venv"})
 SENSITIVE_NAMES = frozenset(
@@ -40,7 +40,7 @@ def create_project_zip(
 ) -> tuple[bytes, tuple[str, ...]]:
     root = root.resolve()
     if not root.is_dir():
-        raise RDPianoError(f"Project directory does not exist: {root}")
+        raise KeyperError(f"Project directory does not exist: {root}")
 
     files: list[Path] = []
     sensitive: list[str] = []
@@ -60,13 +60,13 @@ def create_project_zip(
 
     if sensitive and not allow_sensitive:
         listing = "\n  - ".join(sensitive)
-        raise RDPianoError(
+        raise KeyperError(
             "Sensitive-looking files were found and were not archived:\n"
             f"  - {listing}\n"
             "Remove them, exclude them, or pass --allow-sensitive after review."
         )
     if not files:
-        raise RDPianoError("No transferable files were found in the project directory")
+        raise KeyperError("No transferable files were found in the project directory")
 
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

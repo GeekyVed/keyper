@@ -2,7 +2,7 @@
 
 ## Supported version
 
-The latest release on the `main` branch receives security fixes while RDPiano
+The latest release on the `main` branch receives security fixes while Keyper
 is in prototype status.
 
 ## Reporting a vulnerability
@@ -14,7 +14,7 @@ minimal reproduction with all sensitive values removed.
 
 ## Intended use
 
-RDPiano is for explicitly authorized keyboard automation. It does not promise
+Keyper is for explicitly authorized keyboard automation. It does not promise
 that activity is hidden from the remote system: command history, PowerShell
 logging, endpoint protection, RDS auditing, and screen recording may observe
 everything it types.

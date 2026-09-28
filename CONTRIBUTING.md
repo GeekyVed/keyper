@@ -9,7 +9,7 @@ Run the same dependency-free checks used by CI:
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
-python -m py_compile rdpiano
+python -m py_compile keyper
 bash -n install.sh
 ```
 
@@ -19,6 +19,6 @@ against an unapproved target window.
 
 ## Scope
 
-RDPiano intentionally stays visible, user-initiated, and auditable. Changes
+Keyper intentionally stays visible, user-initiated, and auditable. Changes
 that add stealth, evade monitoring, capture credentials, remove target-window
 guards, or operate without explicit user action are out of scope.

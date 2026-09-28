@@ -32,7 +32,7 @@ jobs:
       - name: Compile sources
         run: |
           python -m compileall -q src tests
-          python -m py_compile rdpiano
+          python -m py_compile keyper
 
       - name: Run tests
         run: PYTHONPATH=src python -m unittest discover -s tests -v
@@ -45,6 +45,6 @@ jobs:
 
       - name: Smoke-test installed command
         run: |
-          rdpiano --version
-          rdpiano --help
+          keyper --version
+          keyper --help
           python -m pip check

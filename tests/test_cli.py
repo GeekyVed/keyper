@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from rdpiano.cli import build_parser, main
+from keyper.cli import build_parser, main
 
 
 class CliTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class CliTests(unittest.TestCase):
                 result = main(["send", str(source), "--to", r"C:\work\main.dart", "--dry-run"])
 
             self.assertEqual(result, 0)
-            self.assertIn("RDPiano PowerShell transcript", output.getvalue())
+            self.assertIn("Keyper PowerShell transcript", output.getvalue())
             self.assertIn(r"C:\work\main.dart", output.getvalue())
 
     def test_sensitive_file_is_rejected(self) -> None:

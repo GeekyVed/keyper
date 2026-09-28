@@ -8,7 +8,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Literal
 
-from .errors import RDPianoError
+from .errors import KeyperError
 
 Compression = Literal["auto", "gzip", "none"]
 
@@ -34,13 +34,13 @@ class TransferPlan:
 def powershell_quote(value: str) -> str:
     """Return a PowerShell single-quoted string literal."""
     if "\x00" in value:
-        raise RDPianoError("The remote path cannot contain a NUL byte")
+        raise KeyperError("The remote path cannot contain a NUL byte")
     return "'" + value.replace("'", "''") + "'"
 
 
 def _prepare_payload(data: bytes, compression: Compression) -> tuple[bytes, str]:
     if compression not in {"auto", "gzip", "none"}:
-        raise RDPianoError(f"Unsupported compression mode: {compression}")
+        raise KeyperError(f"Unsupported compression mode: {compression}")
 
     if compression == "none":
         return data, "none"
@@ -66,7 +66,7 @@ def _decode_command(compression: str) -> str:
 
 def _payload_commands(encoded: str, chunk_chars: int) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if not 256 <= chunk_chars <= 6000:
-        raise RDPianoError("Chunk size must be between 256 and 6000 characters")
+        raise KeyperError("Chunk size must be between 256 and 6000 characters")
     chunks = tuple(encoded[index : index + chunk_chars] for index in range(0, len(encoded), chunk_chars))
     commands = ("$ErrorActionPreference='Stop';$kf=''",) + tuple(
         f"$kf+='{chunk}'" for chunk in chunks
@@ -82,7 +82,7 @@ def build_file_plan(
     compression: Compression = "auto",
 ) -> TransferPlan:
     if not destination.strip():
-        raise RDPianoError("The remote destination path cannot be empty")
+        raise KeyperError("The remote destination path cannot be empty")
 
     payload, applied_compression = _prepare_payload(data, compression)
     encoded = base64.b64encode(payload).decode("ascii")
@@ -96,12 +96,12 @@ def build_file_plan(
         "$kfd=[IO.Path]::GetDirectoryName($kfp);"
         "if($kfd){[IO.Directory]::CreateDirectory($kfd)|Out-Null};"
         + _decode_command(applied_compression)
-        + ";$kft=$kfp+'.rdpiano.tmp';[IO.File]::WriteAllBytes($kft,$kfb);"
+        + ";$kft=$kfp+'.keyper.tmp';[IO.File]::WriteAllBytes($kft,$kfb);"
         "$kfh=(Get-FileHash -LiteralPath $kft -Algorithm SHA256).Hash.ToLowerInvariant();"
         f"if($kfh -ne '{source_hash}'){{Remove-Item -LiteralPath $kft -Force -ErrorAction SilentlyContinue;"
-        "throw ('RDPIANO VERIFY FAILED: '+$kfh)};"
+        "throw ('KEYPER VERIFY FAILED: '+$kfh)};"
         "Move-Item -LiteralPath $kft -Destination $kfp -Force;"
-        f"Write-Host ('RDPIANO OK: {len(data)} bytes -> '+$kfp) -ForegroundColor Green;"
+        f"Write-Host ('KEYPER OK: {len(data)} bytes -> '+$kfp) -ForegroundColor Green;"
         "Remove-Variable kf,kfb,kfc,kfi,kfg,kfo,kfp,kfd,kft,kfh -ErrorAction SilentlyContinue"
     )
 
@@ -126,7 +126,7 @@ def build_tree_plan(
     chunk_chars: int = 1024,
 ) -> TransferPlan:
     if not destination.strip():
-        raise RDPianoError("The remote destination directory cannot be empty")
+        raise KeyperError("The remote destination directory cannot be empty")
 
     encoded = base64.b64encode(archive).decode("ascii")
     chunks, commands = _payload_commands(encoded, chunk_chars)
@@ -135,15 +135,15 @@ def build_tree_plan(
 
     final = (
         f"$kfp=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath({quoted_destination});"
-        "$kft=Join-Path $env:TEMP ('rdpiano-'+[Guid]::NewGuid().ToString('N')+'.zip');"
+        "$kft=Join-Path $env:TEMP ('keyper-'+[Guid]::NewGuid().ToString('N')+'.zip');"
         "$kfb=[Convert]::FromBase64String($kf);[IO.File]::WriteAllBytes($kft,$kfb);"
         "$kfh=(Get-FileHash -LiteralPath $kft -Algorithm SHA256).Hash.ToLowerInvariant();"
         f"if($kfh -ne '{archive_hash}'){{Remove-Item -LiteralPath $kft -Force -ErrorAction SilentlyContinue;"
-        "throw ('RDPIANO VERIFY FAILED: '+$kfh)};"
+        "throw ('KEYPER VERIFY FAILED: '+$kfh)};"
         "[IO.Directory]::CreateDirectory($kfp)|Out-Null;"
         "Expand-Archive -LiteralPath $kft -DestinationPath $kfp -Force;"
         "Remove-Item -LiteralPath $kft -Force;"
-        f"Write-Host ('RDPIANO OK: project extracted -> '+$kfp) -ForegroundColor Green;"
+        f"Write-Host ('KEYPER OK: project extracted -> '+$kfp) -ForegroundColor Green;"
         "Remove-Variable kf,kfb,kfp,kft,kfh -ErrorAction SilentlyContinue"
     )
 

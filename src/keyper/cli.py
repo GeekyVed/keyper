@@ -1,4 +1,4 @@
-"""Command-line interface for RDPiano."""
+"""Command-line interface for Keyper."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 
 from . import __version__
 from .archive import create_project_zip, looks_sensitive
-from .errors import RDPianoError
+from .errors import KeyperError
 from .protocol import TransferPlan, build_file_plan, build_tree_plan
 from .runtime import ProcessLock, stop_running
 from .sender import send_plan
@@ -72,7 +72,7 @@ def _add_transfer_options(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="rdpiano",
+        prog="keyper",
         description="Ferry reviewed files into an approved Remmina session using visible keyboard input.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -117,7 +117,7 @@ def _print_plan(plan: TransferPlan, key_delay_ms: int, settle_ms: int) -> None:
 
 
 def _dry_run(plan: TransferPlan) -> None:
-    print("# RDPiano PowerShell transcript")
+    print("# Keyper PowerShell transcript")
     for command in plan.commands:
         print(command)
 
@@ -126,7 +126,7 @@ def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
     _print_plan(plan, args.key_delay_ms, args.settle_ms)
     max_payload = args.max_payload_mib * 1024 * 1024
     if plan.payload_size > max_payload:
-        raise RDPianoError(
+        raise KeyperError(
             f"Payload is {plan.payload_size:,} bytes, above the configured {max_payload:,}-byte limit"
         )
     if args.dry_run:
@@ -155,7 +155,7 @@ def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
             settle_ms=args.settle_ms,
             progress=progress,
         )
-    print("Transfer commands completed. Confirm the green RDPIANO OK message in PowerShell.")
+    print("Transfer commands completed. Confirm the green KEYPER OK message in PowerShell.")
     return 0
 
 
@@ -176,7 +176,7 @@ def command_doctor() -> int:
     try:
         require_runtime()
         print("[ok] Wayland + Hyprland session")
-    except RDPianoError as exc:
+    except KeyperError as exc:
         failed = True
         print(f"[failed] {exc}")
     return 1 if failed else 0
@@ -184,7 +184,7 @@ def command_doctor() -> int:
 
 def command_probe(args: argparse.Namespace) -> int:
     require_runtime()
-    probe = "RDPIANO-PROBE: abcXYZ 0123456789 +/= $()[]{};,:._-\\"
+    probe = "KEYPER-PROBE: abcXYZ 0123456789 +/= $()[]{};,:._-\\"
     with ProcessLock():
         countdown(
             args.countdown,
@@ -200,14 +200,14 @@ def command_probe(args: argparse.Namespace) -> int:
 def command_type(args: argparse.Namespace) -> int:
     path = args.file.resolve()
     if not path.is_file():
-        raise RDPianoError(f"Text file does not exist: {path}")
+        raise KeyperError(f"Text file does not exist: {path}")
     data = path.read_bytes()
     if len(data) > args.max_bytes:
-        raise RDPianoError(f"File is larger than the {args.max_bytes:,}-byte direct-typing limit")
+        raise KeyperError(f"File is larger than the {args.max_bytes:,}-byte direct-typing limit")
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RDPianoError("Direct typing accepts UTF-8 text only; use 'send' for binary files") from exc
+        raise KeyperError("Direct typing accepts UTF-8 text only; use 'send' for binary files") from exc
 
     require_runtime()
     with ProcessLock():
@@ -228,9 +228,9 @@ def command_type(args: argparse.Namespace) -> int:
 def command_send(args: argparse.Namespace) -> int:
     path = args.file.resolve()
     if not path.is_file():
-        raise RDPianoError(f"File does not exist: {path}")
+        raise KeyperError(f"File does not exist: {path}")
     if looks_sensitive(path) and not args.allow_sensitive:
-        raise RDPianoError(
+        raise KeyperError(
             f"Refusing sensitive-looking file {path.name!r}; pass --allow-sensitive only after review"
         )
     plan = build_file_plan(
@@ -266,13 +266,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "stop":
             return stop_running()
         parser.error(f"Unknown command: {args.command}")
-    except RDPianoError as exc:
-        print(f"rdpiano: error: {exc}", file=sys.stderr)
+    except KeyperError as exc:
+        print(f"keyper: error: {exc}", file=sys.stderr)
         return 2
     except OSError as exc:
-        print(f"rdpiano: operating-system error: {exc}", file=sys.stderr)
+        print(f"keyper: operating-system error: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
-        print("\nrdpiano: interrupted", file=sys.stderr)
+        print("\nkeyper: interrupted", file=sys.stderr)
         return 130
     return 0

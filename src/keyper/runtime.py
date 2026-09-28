@@ -7,12 +7,12 @@ import os
 from pathlib import Path
 import signal
 
-from .errors import RDPianoError
+from .errors import KeyperError
 
 
 def lock_path() -> Path:
     runtime = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
-    return runtime / f"rdpiano-{os.getuid()}.pid"
+    return runtime / f"keyper-{os.getuid()}.pid"
 
 
 def _is_running(pid: int) -> bool:
@@ -37,9 +37,9 @@ class ProcessLock:
             except (OSError, ValueError):
                 existing_pid = -1
             if existing_pid > 0 and _is_running(existing_pid):
-                raise RDPianoError(
-                    f"Another RDPiano transfer is running with PID {existing_pid}. "
-                    "Use 'rdpiano stop' to stop it."
+                raise KeyperError(
+                    f"Another Keyper transfer is running with PID {existing_pid}. "
+                    "Use 'keyper stop' to stop it."
                 )
             self.path.unlink(missing_ok=True)
 
@@ -47,7 +47,7 @@ class ProcessLock:
         try:
             descriptor = os.open(self.path, flags, 0o600)
         except FileExistsError as exc:
-            raise RDPianoError("Another RDPiano process acquired the transfer lock") from exc
+            raise KeyperError("Another Keyper process acquired the transfer lock") from exc
         with os.fdopen(descriptor, "w", encoding="ascii") as handle:
             handle.write(str(os.getpid()))
         self.acquired = True
@@ -70,16 +70,16 @@ class ProcessLock:
 def stop_running() -> int:
     path = lock_path()
     if not path.exists():
-        print("No RDPiano transfer is running.")
+        print("No Keyper transfer is running.")
         return 0
     try:
         pid = int(path.read_text(encoding="ascii").strip())
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         path.unlink(missing_ok=True)
-        print("Removed a stale RDPiano lock.")
+        print("Removed a stale Keyper lock.")
         return 0
     except (OSError, ValueError) as exc:
-        raise RDPianoError(f"Unable to stop the running transfer: {exc}") from exc
-    print(f"Stop signal sent to RDPiano PID {pid}.")
+        raise KeyperError(f"Unable to stop the running transfer: {exc}") from exc
+    print(f"Stop signal sent to Keyper PID {pid}.")
     return 0

@@ -1,15 +1,15 @@
-# RDPiano
+# Keyper
 
-[![CI](https://github.com/GeekyVed/rdpiano/actions/workflows/ci.yml/badge.svg)](https://github.com/GeekyVed/rdpiano/actions/workflows/ci.yml)
+[![CI](https://github.com/GeekyVed/keyper/actions/workflows/ci.yml/badge.svg)](https://github.com/GeekyVed/keyper/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Wayland%20%2B%20Hyprland-58E1FF)](https://hypr.land/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-RDPiano plays reviewed files into an approved Windows RDP session as keyboard
+Keyper plays reviewed files into an approved Windows RDP session as keyboard
 input. It is designed for environments where administrators explicitly allow
 keyboard automation while clipboard and drive redirection remain disabled.
 
-RDPiano does not install anything on Windows or open a separate connection to
+Keyper does not install anything on Windows or open a separate connection to
 the remote machine. It types visible PowerShell commands into the focused
 Remmina window, reconstructs the file, and verifies its SHA-256 hash before
 placing it at the destination.
@@ -53,10 +53,10 @@ placing it at the destination.
 On Omarchy, a fresh installation is:
 
 ```bash
-git clone https://github.com/GeekyVed/rdpiano.git
-cd rdpiano
+git clone https://github.com/GeekyVed/keyper.git
+cd keyper
 ./install.sh --with-deps
-rdpiano doctor
+keyper doctor
 ```
 
 `--with-deps` installs missing Arch packages through `omarchy pkg add`. On a
@@ -78,7 +78,7 @@ To remove that launcher safely:
 ./install.sh --uninstall
 ```
 
-You can also run `./rdpiano` directly without installing it.
+You can also run `./keyper` directly without installing it.
 
 ## First-run keyboard check
 
@@ -86,7 +86,7 @@ Keyboard layouts can disagree about punctuation. Before transferring files,
 open Notepad inside RDP, focus an empty document, and run:
 
 ```bash
-rdpiano probe
+keyper probe
 ```
 
 You get a seven-second countdown to focus Remmina. Compare the typed result
@@ -98,22 +98,22 @@ differ.
 Open PowerShell inside RDP and leave an empty prompt ready. Then run locally:
 
 ```bash
-rdpiano send ./lib/main.dart --to 'C:\work\superadmin\lib\main.dart'
+keyper send ./lib/main.dart --to 'C:\work\superadmin\lib\main.dart'
 ```
 
 Relative destinations use PowerShell's current directory:
 
 ```bash
-rdpiano send ./lib/main.dart --to '.\lib\main.dart'
+keyper send ./lib/main.dart --to '.\lib\main.dart'
 ```
 
-RDPiano types and executes the reconstruction commands. Confirm the green
-`RDPIANO OK` message in the remote PowerShell window before continuing.
+Keyper types and executes the reconstruction commands. Confirm the green
+`KEYPER OK` message in the remote PowerShell window before continuing.
 
 ## Transfer a Flutter project
 
 ```bash
-rdpiano send-tree ~/projects/superadmin --to 'C:\work\superadmin'
+keyper send-tree ~/projects/superadmin --to 'C:\work\superadmin'
 ```
 
 The project is archived locally, transferred, hash-verified, and extracted
@@ -121,7 +121,7 @@ with `Expand-Archive -Force`. Existing matching files are overwritten;
 unrelated destination files remain. `.git`, `.dart_tool`, `build`, `.venv`,
 `__pycache__`, and `.pytest_cache` are excluded automatically.
 
-RDPiano stops if it finds likely secrets such as `.env.*`, `key.properties`,
+Keyper stops if it finds likely secrets such as `.env.*`, `key.properties`,
 `google-services.json`, private keys, signing keystores, or certificate files.
 Review and remove them instead of transferring secrets. `--allow-sensitive`
 exists for explicitly approved fixtures but should be exceptional.
@@ -131,7 +131,7 @@ exists for explicitly approved fixtures but should be exceptional.
 For a small UTF-8 snippet that should be typed into an editor:
 
 ```bash
-rdpiano type ./snippet.txt
+keyper type ./snippet.txt
 ```
 
 This command deliberately does not press Enter afterward. Editors may
@@ -143,7 +143,7 @@ auto-indent, auto-close brackets, or format while typing, so PowerShell-based
 Inspect the exact PowerShell transcript without typing anything:
 
 ```bash
-rdpiano send ./lib/main.dart --to '.\lib\main.dart' --dry-run
+keyper send ./lib/main.dart --to '.\lib\main.dart' --dry-run
 ```
 
 The transcript contains the encoded payload, so save or share it only in an
@@ -152,7 +152,7 @@ approved location.
 For a high-latency session, slow the transfer down:
 
 ```bash
-rdpiano send ./file.dart --to '.\file.dart' \
+keyper send ./file.dart --to '.\file.dart' \
   --key-delay-ms 4 --settle-ms 250 --chunk-chars 768
 ```
 
@@ -165,7 +165,7 @@ channel is intentionally visible and comparatively slow.
 From another local terminal:
 
 ```bash
-rdpiano stop
+keyper stop
 ```
 
 Moving focus away from the captured Remmina window also stops before the next
@@ -173,7 +173,7 @@ chunk. The bounded chunk already being typed may take a few seconds to finish.
 
 ## How it works
 
-1. RDPiano archives or compresses the reviewed local input when appropriate.
+1. Keyper archives or compresses the reviewed local input when appropriate.
 2. It splits Base64 into PowerShell-friendly chunks.
 3. After the countdown, it captures the focused Remmina window identity.
 4. It types one command at a time, checking focus between every chunk.
@@ -202,7 +202,7 @@ uv tool install --editable .
 - Remote security controls may block PowerShell or archive extraction.
 - Directory extraction is not atomic.
 - Large binaries are a poor fit for a keyboard channel.
-- RDPiano cannot read the remote success message; a user must confirm it.
+- Keyper cannot read the remote success message; a user must confirm it.
 
 ## License
 
