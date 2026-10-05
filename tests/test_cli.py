@@ -1,8 +1,10 @@
 import contextlib
 import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from keyper.cli import build_parser, main
 
@@ -38,6 +40,23 @@ class CliTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 parser.parse_args(["probe", "--countdown", "61"])
+
+    def test_type_only_mode_removes_powershell_commands(self) -> None:
+        with patch.dict(os.environ, {"KEYPER_TYPE_ONLY": "1"}):
+            parser = build_parser()
+            typed = parser.parse_args(["type", "example.dart"])
+            self.assertEqual(typed.command, "type")
+
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(["send", "example.dart", "--to", r"C:\work\example.dart"])
+
+    def test_explicit_false_value_keeps_transfer_commands(self) -> None:
+        with patch.dict(os.environ, {"KEYPER_TYPE_ONLY": "false"}):
+            args = build_parser().parse_args(
+                ["send", "example.dart", "--to", r"C:\work\example.dart", "--dry-run"]
+            )
+            self.assertEqual(args.command, "send")
 
 
 if __name__ == "__main__":

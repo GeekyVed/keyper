@@ -80,6 +80,29 @@ To remove that launcher safely:
 
 You can also run `./keyper` directly without installing it.
 
+## Type-only mode
+
+For environments where PowerShell-backed transfers must not be available,
+enable Keyper's fail-safe type-only mode in the local shell:
+
+```bash
+export KEYPER_TYPE_ONLY=1
+```
+
+While enabled, `send` and `send-tree` are removed from the command parser and
+are also blocked by the transfer handlers. `doctor`, `probe`, `type`, and
+`stop` remain available. Confirm the mode before typing:
+
+```bash
+keyper doctor
+keyper --help
+```
+
+`doctor` reports the active mode, and `--help` does not list either PowerShell
+transfer command. The setting applies to the current shell and its child
+processes. Run `unset KEYPER_TYPE_ONLY` only when PowerShell transfers have
+been explicitly approved again.
+
 ## First-run keyboard check
 
 Keyboard layouts can disagree about punctuation. Before transferring files,

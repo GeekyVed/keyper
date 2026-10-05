@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -18,6 +19,20 @@ from .wayland import WindowGuard, WtypeKeyboard, countdown, require_runtime
 DEFAULT_ALLOWED_WINDOW = r"(?i)remmina"
 DEFAULT_MAX_PAYLOAD_MIB = 5
 DIRECT_TYPE_CHUNK_CHARS = 1024
+TYPE_ONLY_ENV = "KEYPER_TYPE_ONLY"
+
+
+def type_only_enabled() -> bool:
+    """Return whether PowerShell-backed transfer commands must be disabled."""
+    value = os.environ.get(TYPE_ONLY_ENV, "").strip().lower()
+    return value not in {"", "0", "false", "no", "off"}
+
+
+def _require_transfer_enabled() -> None:
+    if type_only_enabled():
+        raise KeyperError(
+            f"PowerShell transfers are disabled because {TYPE_ONLY_ENV} is enabled"
+        )
 
 
 def _positive_int(value: str) -> int:
@@ -71,9 +86,19 @@ def _add_transfer_options(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    type_only = type_only_enabled()
     parser = argparse.ArgumentParser(
         prog="keyper",
-        description="Ferry reviewed files into an approved Remmina session using visible keyboard input.",
+        description=(
+            "Type reviewed text into an approved Remmina session."
+            if type_only
+            else "Ferry reviewed files into an approved Remmina session using visible keyboard input."
+        ),
+        epilog=(
+            f"Type-only mode is active via {TYPE_ONLY_ENV}; PowerShell transfer commands are unavailable."
+            if type_only
+            else None
+        ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -88,16 +113,17 @@ def build_parser() -> argparse.ArgumentParser:
     raw.add_argument("--max-bytes", type=_positive_int, default=200_000)
     _add_typing_options(raw)
 
-    send = commands.add_parser("send", help="Transfer one file through a remote PowerShell prompt")
-    send.add_argument("file", type=Path)
-    send.add_argument("--compression", choices=("auto", "gzip", "none"), default="auto")
-    send.add_argument("--allow-sensitive", action="store_true")
-    _add_transfer_options(send)
+    if not type_only:
+        send = commands.add_parser("send", help="Transfer one file through a remote PowerShell prompt")
+        send.add_argument("file", type=Path)
+        send.add_argument("--compression", choices=("auto", "gzip", "none"), default="auto")
+        send.add_argument("--allow-sensitive", action="store_true")
+        _add_transfer_options(send)
 
-    tree = commands.add_parser("send-tree", help="Compress and transfer a project directory")
-    tree.add_argument("directory", type=Path)
-    tree.add_argument("--allow-sensitive", action="store_true")
-    _add_transfer_options(tree)
+        tree = commands.add_parser("send-tree", help="Compress and transfer a project directory")
+        tree.add_argument("directory", type=Path)
+        tree.add_argument("--allow-sensitive", action="store_true")
+        _add_transfer_options(tree)
 
     commands.add_parser("stop", help="Stop a running transfer")
     return parser
@@ -167,6 +193,8 @@ def command_doctor() -> int:
         "python": sys.executable,
     }
     failed = False
+    if type_only_enabled():
+        print(f"[mode] type-only: send and send-tree disabled by {TYPE_ONLY_ENV}")
     for name, path in checks.items():
         if path:
             print(f"[ok] {name}: {path}")
@@ -226,6 +254,7 @@ def command_type(args: argparse.Namespace) -> int:
 
 
 def command_send(args: argparse.Namespace) -> int:
+    _require_transfer_enabled()
     path = args.file.resolve()
     if not path.is_file():
         raise KeyperError(f"File does not exist: {path}")
@@ -243,6 +272,7 @@ def command_send(args: argparse.Namespace) -> int:
 
 
 def command_send_tree(args: argparse.Namespace) -> int:
+    _require_transfer_enabled()
     archive, files = create_project_zip(args.directory, allow_sensitive=args.allow_sensitive)
     print(f"Archived {len(files):,} reviewed files from {args.directory.resolve()}")
     plan = build_tree_plan(archive, args.to, chunk_chars=args.chunk_chars)
