@@ -41,6 +41,22 @@ class CliTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 parser.parse_args(["probe", "--countdown", "61"])
 
+    def test_ydotool_is_the_default_typing_backend(self) -> None:
+        args = build_parser().parse_args(["probe"])
+        self.assertEqual(args.backend, "ydotool")
+
+    def test_type_rejects_non_ascii_before_runtime_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "unicode.dart"
+            source.write_text("// café\n", encoding="utf-8")
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                result = main(["type", str(source)])
+
+            self.assertEqual(result, 2)
+            self.assertIn("ASCII text only", errors.getvalue())
+
     def test_type_only_mode_removes_powershell_commands(self) -> None:
         with patch.dict(os.environ, {"KEYPER_TYPE_ONLY": "1"}):
             parser = build_parser()

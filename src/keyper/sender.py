@@ -6,12 +6,12 @@ import time
 from collections.abc import Callable
 
 from .protocol import TransferPlan
-from .wayland import WindowGuard, WtypeKeyboard
+from .wayland import Keyboard, WindowGuard
 
 
 def send_plan(
     plan: TransferPlan,
-    keyboard: WtypeKeyboard,
+    keyboard: Keyboard,
     guard: WindowGuard,
     *,
     settle_ms: int,
@@ -30,4 +30,3 @@ def send_plan(
             time.sleep(settle_ms / 1000)
         if progress is not None:
             progress(index, total)
-

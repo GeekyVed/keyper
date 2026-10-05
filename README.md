@@ -10,9 +10,9 @@ input. It is designed for environments where administrators explicitly allow
 keyboard automation while clipboard and drive redirection remain disabled.
 
 Keyper does not install anything on Windows or open a separate connection to
-the remote machine. It types visible PowerShell commands into the focused
-Remmina window, reconstructs the file, and verifies its SHA-256 hash before
-placing it at the destination.
+the remote machine. Its default `ydotool` backend emits local kernel input
+events that Remmina handles like a physical keyboard. In transfer mode, it
+types visible PowerShell commands that reconstruct and verify the file.
 
 > [!IMPORTANT]
 > This is auditable automation, not a stealth or policy-bypass tool. PowerShell
@@ -39,7 +39,7 @@ placing it at the destination.
 
 - Python 3.11 or newer
 - Wayland with Hyprland
-- `wtype` and `hyprctl`
+- `ydotool`, its `ydotoold` service, and `hyprctl`
 - Remmina with RDP support
 
 ### Remote Windows machine
@@ -66,6 +66,20 @@ installed, the dependency-free path is simply:
 ```bash
 ./install.sh
 ```
+
+On Arch, `/dev/uinput` belongs to the `input` group. If the installer reports
+that permission is missing, review this command, run it, and then sign out of
+Linux and back in before rerunning the installer:
+
+```bash
+sudo usermod -aG input "$USER"
+```
+
+Membership in `input` is security-sensitive: it permits access to local input
+devices, not just Keyper. A machine administrator can instead configure a
+narrower distro-specific permission for `/dev/uinput`. Keyper checks the
+`ydotoold` socket before every run and fails before the countdown when the
+service is unavailable.
 
 The installer links the checkout's launcher into `~/.local/bin`; it does not
 download Python packages or modify the remote Windows machine. Keep the clone
@@ -116,6 +130,11 @@ You get a seven-second countdown to focus Remmina. Compare the typed result
 with the expected probe shown in the local terminal. Do not continue if they
 differ.
 
+`ydotool` is the default because its kernel-level events survive Remmina's RDP
+translation. The older `wtype` backend remains available only for diagnostics
+with `--backend wtype`; it is known to produce incorrect keys in some Remmina
+sessions.
+
 ## Transfer one file
 
 Open PowerShell inside RDP and leave an empty prompt ready. Then run locally:
@@ -151,7 +170,7 @@ exists for explicitly approved fixtures but should be exceptional.
 
 ## Direct typing
 
-For a small UTF-8 snippet that should be typed into an editor:
+For a small ASCII source file or snippet that should be typed into an editor:
 
 ```bash
 keyper type ./snippet.txt

@@ -50,19 +50,19 @@ fi
 
 if $install_dependencies; then
   if command -v omarchy >/dev/null 2>&1; then
-    omarchy pkg add python wtype remmina freerdp
+    omarchy pkg add python ydotool remmina freerdp
   elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --needed python wtype remmina freerdp
+    sudo pacman -S --needed python ydotool remmina freerdp
   else
     printf '%s\n' \
       "Automatic dependency installation supports Omarchy and Arch only." \
-      "Install Python 3.11+, wtype, Hyprland, and Remmina, then rerun ./install.sh." >&2
+      "Install Python 3.11+, ydotool, Hyprland, and Remmina, then rerun ./install.sh." >&2
     exit 1
   fi
 fi
 
 missing=()
-for program in python3 wtype hyprctl remmina; do
+for program in python3 ydotool hyprctl remmina; do
   if ! command -v "$program" >/dev/null 2>&1; then
     missing+=("$program")
   fi
@@ -72,6 +72,19 @@ if ((${#missing[@]})); then
   printf 'Missing required commands: %s\n' "${missing[*]}" >&2
   printf '%s\n' "On Omarchy, rerun: ./install.sh --with-deps" >&2
   exit 1
+fi
+
+if [[ " $(id -nG) " != *" input "* ]]; then
+  printf '%s\n' \
+    "Your current login does not have the input-group permission required by ydotool on Arch." \
+    "Review the security note in README.md, then add the account and sign out/in:" \
+    "  sudo usermod -aG input \"\$USER\"" >&2
+  exit 1
+fi
+
+if command -v systemctl >/dev/null 2>&1 && \
+    systemctl --user cat ydotool.service >/dev/null 2>&1; then
+  systemctl --user enable --now ydotool.service
 fi
 
 if ! python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then

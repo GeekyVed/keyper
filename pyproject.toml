@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "keyper"
-version = "0.2.0"
+version = "0.3.0"
 description = "Auditable keyboard-channel file transfer for approved Wayland RDP sessions"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Keyper contributors" }]
-keywords = ["rdp", "wayland", "remmina", "wtype", "powershell"]
+keywords = ["rdp", "wayland", "remmina", "ydotool", "powershell"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",

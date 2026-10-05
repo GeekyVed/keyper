@@ -14,7 +14,13 @@ from .errors import KeyperError
 from .protocol import TransferPlan, build_file_plan, build_tree_plan
 from .runtime import ProcessLock, stop_running
 from .sender import send_plan
-from .wayland import WindowGuard, WtypeKeyboard, countdown, require_runtime
+from .wayland import (
+    KEYBOARD_BACKENDS,
+    WindowGuard,
+    countdown,
+    create_keyboard,
+    require_runtime,
+)
 
 DEFAULT_ALLOWED_WINDOW = r"(?i)remmina"
 DEFAULT_MAX_PAYLOAD_MIB = 5
@@ -74,6 +80,12 @@ def _add_typing_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--countdown", type=_countdown_seconds, default=7)
     parser.add_argument("--key-delay-ms", type=_key_delay_ms, default=2)
     parser.add_argument("--allowed-window", default=DEFAULT_ALLOWED_WINDOW)
+    parser.add_argument(
+        "--backend",
+        choices=KEYBOARD_BACKENDS,
+        default="ydotool",
+        help="keyboard injection backend (default: ydotool)",
+    )
 
 
 def _add_transfer_options(parser: argparse.ArgumentParser) -> None:
@@ -103,12 +115,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    commands.add_parser("doctor", help="Check the local Wayland/Hyprland requirements")
+    doctor = commands.add_parser("doctor", help="Check the local Wayland/Hyprland requirements")
+    doctor.add_argument("--backend", choices=KEYBOARD_BACKENDS, default="ydotool")
 
     probe = commands.add_parser("probe", help="Type a harmless keyboard-layout probe into Remmina")
     _add_typing_options(probe)
 
-    raw = commands.add_parser("type", help="Type a UTF-8 text file directly into the focused RDP app")
+    raw = commands.add_parser("type", help="Type a text file directly into the focused RDP app")
     raw.add_argument("file", type=Path)
     raw.add_argument("--max-bytes", type=_positive_int, default=200_000)
     _add_typing_options(raw)
@@ -159,7 +172,8 @@ def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
         _dry_run(plan)
         return 0
 
-    require_runtime()
+    keyboard = create_keyboard(args.backend, args.key_delay_ms)
+    require_runtime(args.backend)
     with ProcessLock():
         countdown(
             args.countdown,
@@ -168,7 +182,6 @@ def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
         )
         guard = WindowGuard.capture(args.allowed_window)
         print(f"Locked to Remmina window: {guard.expected.title!r}")
-        keyboard = WtypeKeyboard(args.key_delay_ms)
 
         def progress(current: int, total: int) -> None:
             if current == total or current == 1 or current % max(1, total // 10) == 0:
@@ -185,9 +198,9 @@ def _send(plan: TransferPlan, args: argparse.Namespace) -> int:
     return 0
 
 
-def command_doctor() -> int:
+def command_doctor(args: argparse.Namespace) -> int:
     checks = {
-        "wtype": shutil.which("wtype"),
+        args.backend: shutil.which(args.backend),
         "hyprctl": shutil.which("hyprctl"),
         "remmina": shutil.which("remmina"),
         "python": sys.executable,
@@ -202,8 +215,8 @@ def command_doctor() -> int:
             failed = True
             print(f"[missing] {name}")
     try:
-        require_runtime()
-        print("[ok] Wayland + Hyprland session")
+        require_runtime(args.backend)
+        print(f"[ok] Wayland + Hyprland + {args.backend} runtime")
     except KeyperError as exc:
         failed = True
         print(f"[failed] {exc}")
@@ -211,8 +224,10 @@ def command_doctor() -> int:
 
 
 def command_probe(args: argparse.Namespace) -> int:
-    require_runtime()
     probe = "KEYPER-PROBE: abcXYZ 0123456789 +/= $()[]{};,:._-\\"
+    keyboard = create_keyboard(args.backend, args.key_delay_ms)
+    keyboard.validate_text(probe)
+    require_runtime(args.backend)
     with ProcessLock():
         countdown(
             args.countdown,
@@ -220,7 +235,7 @@ def command_probe(args: argparse.Namespace) -> int:
         )
         guard = WindowGuard.capture(args.allowed_window)
         guard.assert_focused()
-        WtypeKeyboard(args.key_delay_ms).type_text(probe)
+        keyboard.type_text(probe)
     print(f"Expected text: {probe}")
     return 0
 
@@ -237,7 +252,9 @@ def command_type(args: argparse.Namespace) -> int:
     except UnicodeDecodeError as exc:
         raise KeyperError("Direct typing accepts UTF-8 text only; use 'send' for binary files") from exc
 
-    require_runtime()
+    keyboard = create_keyboard(args.backend, args.key_delay_ms)
+    keyboard.validate_text(text)
+    require_runtime(args.backend)
     with ProcessLock():
         countdown(
             args.countdown,
@@ -245,7 +262,6 @@ def command_type(args: argparse.Namespace) -> int:
             "click the insertion point, then focus Remmina.",
         )
         guard = WindowGuard.capture(args.allowed_window)
-        keyboard = WtypeKeyboard(args.key_delay_ms)
         for offset in range(0, len(text), DIRECT_TYPE_CHUNK_CHARS):
             guard.assert_focused()
             keyboard.type_text(text[offset : offset + DIRECT_TYPE_CHUNK_CHARS])
@@ -284,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "doctor":
-            return command_doctor()
+            return command_doctor(args)
         if args.command == "probe":
             return command_probe(args)
         if args.command == "type":
